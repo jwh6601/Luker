@@ -85,3 +85,4 @@ tests/.e2e-screenshots/
 _probe-th/
 node_modules
 tests/node_modules
+/.workbench-qa/

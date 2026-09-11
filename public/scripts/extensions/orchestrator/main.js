@@ -105,6 +105,7 @@ import {
     startRun,
 } from './run-state/store.js';
 import { openRunPanel, initRunPanel } from './run-panel/panel.js';
+import { mountWorkbench } from './workbench.js';
 
 // Local no-op stubs for the legacy runtime-trace API. The trace module
 // was deleted when the run-panel store became the source of truth for
@@ -8619,7 +8620,10 @@ jQuery(() => {
         });
     }
     clearCapsulePrompt(context);
-    void loadOrchestratorChatState(context).finally(() => ensureUi());
+    void loadOrchestratorChatState(context).finally(() => {
+        ensureUi();
+        mountWorkbench({ refresh: ensureUi, getEffectiveProfile });
+    });
 
     if (context.eventTypes.GENERATION_WORLD_INFO_FINALIZED) {
         context.eventSource.on(context.eventTypes.GENERATION_WORLD_INFO_FINALIZED, onWorldInfoFinalized);

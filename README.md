@@ -1,5 +1,7 @@
 # Luker
 
+> 本分支提供浅色「故事工作台」界面，包含故事库、简化的模型与流程配置及设置入口。运行与验证说明见 [工作台改版说明](工作台改版说明.md)。
+
 Luker is a SillyTavern fork focused on cleaner API behavior, stronger extension hooks, and production-grade generation lifecycle handling.
 
 ## Why Luker

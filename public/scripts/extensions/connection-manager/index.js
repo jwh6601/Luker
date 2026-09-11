@@ -712,7 +712,7 @@ function makeFancyProfile(profile) {
  * @param {ConnectionProfile} profile Connection profile
  * @returns {Promise<void>}
  */
-async function applyConnectionProfile(profile) {
+export async function applyConnectionProfile(profile) {
     if (!profile) {
         return;
     }
@@ -812,7 +812,7 @@ async function updateConnectionProfile(profile) {
  * Renders the connection profile details.
  * @param {HTMLSelectElement} profiles Select element containing connection profiles
  */
-function renderConnectionProfiles(profiles) {
+export function renderConnectionProfiles(profiles) {
     profiles.innerHTML = '';
     const noneOption = document.createElement('option');
 

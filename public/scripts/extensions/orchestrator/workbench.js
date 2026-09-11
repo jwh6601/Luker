@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A presentation layer over Luker's existing settings and preset APIs.
 import { loadGlobalEditorState } from './editor-state.js';
+import { openConnectionManager, selectWriterConnection } from '../connection-manager/workbench-connections.js';
 import { toEditablePresetMap, toEditableSpec } from './editable-spec.js';
 import { getActivePresetId, getPreset, listPresets, setActivePresetId, writeActivePreset } from './preset-library.js';
 import { renderConnectionProfileOptions, renderOpenAIPresetOptions } from './agent-resolution.js';
@@ -126,7 +127,8 @@ function flowHtml() {
 function detailHtml() {
     if (selected === '__writer') return `<section class="wb-card wb-detail"><span class="wb-eyebrow">正在配置</span><h2>正文生成</h2><p class="wb-muted">使用当前对话的模型与参数</p>
         <div class="wb-info">${icon('circle-info')}<div><strong>正文沿用 Luker 对话配置</strong><p>连接、模型和正文预设均在原有配置中管理。</p></div></div>
-        <div class="wb-writer-actions"><button class="wb-button" data-wb-native="sys-settings-button">${icon('plug')} 配置连接与模型</button><button class="wb-button" data-wb-native="ai-config-button">${icon('sliders')} 调整正文参数</button></div>
+        <label for="wb-writer-api">正文连接（选择后立即应用）</label><select id="wb-writer-api">${renderConnectionProfileOptions(ctx().extensionSettings.connectionManager?.profiles?.find(item => item.id === ctx().extensionSettings.connectionManager.selectedProfile)?.name || '', '选择已保存的连接')}</select>
+        <div class="wb-writer-actions"><button class="wb-button" data-wb-action="connections">${icon('plug')} 管理连接</button><button class="wb-button" data-wb-native="ai-config-button">${icon('sliders')} 调整正文参数</button></div>
         ${saveFooter()}</section>`;
     const preset = editor.presets[selected];
     if (!preset) return '<section class="wb-card wb-detail"><h2>选择一个环节</h2></section>';
@@ -137,7 +139,7 @@ function detailHtml() {
     return `<section class="wb-card wb-detail"><span class="wb-eyebrow">正在配置</span><h2>${escape(title)}</h2><p class="wb-muted">这些设置用于全局方案中的当前环节</p>
         <form id="wb-node-form"><div class="wb-fields">
             <label for="wb-api">API 连接</label><select id="wb-api">${renderConnectionProfileOptions(preset.apiPresetName, '沿用默认连接')}</select>
-            <span class="wb-field-label">模型</span><div class="wb-model"><span>${escape(modelFor(preset))}</span><button type="button" class="wb-link" data-wb-native="sys-settings-button">管理连接</button></div>
+            <span class="wb-field-label">模型</span><div class="wb-model"><span>${escape(modelFor(preset))}</span><button type="button" class="wb-link" data-wb-action="connections">管理连接</button></div>
             <span class="wb-field-label" id="wb-effort-label">推理等级</span><div class="wb-effort" role="group" aria-labelledby="wb-effort-label">${[['auto', '默认'], ['low', '低'], ['medium', '中'], ['high', '高']].map(([value, label]) => `<button type="button" data-wb-effort="${value}" aria-pressed="${effort === value}" class="${effort === value ? 'wb-chosen' : ''}">${label}</button>`).join('')}</div>
             <label for="wb-tokens">最大输出长度</label><div class="wb-token-field"><input id="wb-tokens" type="number" min="1" max="2000000" step="1" value="${escape(params.openai_max_tokens ?? 2048)}" required><span>tokens</span></div>
         </div>
@@ -162,7 +164,7 @@ function renderModels() {
     const advancedOpen = sameNode && panel.querySelector('.wb-advanced')?.open;
     const focusedId = sameNode && panel.contains(document.activeElement) ? document.activeElement.id : '';
     const supported = settings().executionMode === 'spec';
-    if (!enabled || !editor.presets[selected]) selected = enabled ? Object.keys(editor.presets)[0] : '__writer';
+    if (!enabled || (selected !== '__writer' && !editor.presets[selected])) selected = enabled ? Object.keys(editor.presets)[0] : '__writer';
     const options = listPresets(settings(), 'spec').map(preset => `<option value="${escape(preset.id)}" ${preset.id === activeId ? 'selected' : ''}>${escape(preset.name === 'Default' ? '默认方案' : preset.name)}</option>`).join('');
     const profile = effectiveProfile(ctx());
     panel.innerHTML = `${header('模型与流程', '让每个环节使用合适的模型')}
@@ -313,6 +315,10 @@ export function mountWorkbench({ refresh, getEffectiveProfile }) {
         const button = event.target.closest('button');
         if (!button || saving) return;
         if (button.dataset.wbNode) { selected = button.dataset.wbNode; renderModels(); }
+        if (button.dataset.wbAction === 'connections' || button.dataset.wbNative === 'sys-settings-button') {
+            openConnectionManager(() => { if (page === 'models') renderModels(); });
+            return;
+        }
         if (button.dataset.wbNative !== undefined) openNative(button.dataset.wbNative);
         if (button.dataset.wbEffort) changeEffort(button.dataset.wbEffort);
         if (button.dataset.wbMode) {
@@ -340,6 +346,11 @@ export function mountWorkbench({ refresh, getEffectiveProfile }) {
         if (event.target.id === 'wb-system') editNode('systemPrompt', event.target.value);
     });
     panel.addEventListener('change', async event => {
+        if (event.target.id === 'wb-writer-api') {
+            event.target.disabled = true;
+            try { await selectWriterConnection(event.target.value); renderModels(); say('正文连接已应用并保存'); } catch (error) { say(error.message, true); event.target.disabled = false; }
+            return;
+        }
         if (event.target.id === 'wb-api') { editNode('apiPresetName', event.target.value); renderModels(); }
         if (event.target.id === 'wb-prompt-preset') { editNode('promptPresetName', event.target.value); parameterEdits.delete(selected); renderModels(); }
         if (event.target.id === 'wb-effort') changeEffort(event.target.value);

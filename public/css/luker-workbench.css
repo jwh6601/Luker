@@ -176,3 +176,25 @@ body.luker-workbench.wb-native .drawer-content { max-width: calc(100vw - var(--w
     #wb-search { width: 100%; }
     body.luker-workbench.wb-native #sheld { bottom: 73px; height: calc(100% - 113px); }
 }
+
+/* Saved connection editor shares the workbench palette. */
+.wb-connections { width: min(900px, 94vw); max-height: 90vh; overflow: auto; padding: 28px; border: 1px solid #ddd8ce; border-radius: 16px; background: #faf9f6; color: #26352f; box-shadow: 0 20px 80px #0004; }
+.wb-connections::backdrop { background: #18282088; }
+.wb-connections header { display: flex; justify-content: space-between; align-items: start; gap: 20px; margin-bottom: 22px; }
+.wb-connections header button { background: transparent; border: 0; font-size: 28px; color: inherit; cursor: pointer; }
+.wb-connections h2, .wb-connections h3 { margin: 0 0 12px; }
+.wb-connections p, .wb-connections small { color: #68766e; font-size: 13px; line-height: 1.6; }
+.wb-connection-layout { display: grid; grid-template-columns: 240px 1fr; gap: 28px; }
+.wb-connections label { display: grid; gap: 7px; margin: 13px 0; font-size: 14px; }
+.wb-connections input, .wb-connections select { width: 100%; padding: 10px 12px; border: 1px solid #d5dbd4; border-radius: 7px; background: white; color: #26352f; font: inherit; }
+.wb-connections [hidden] { display: none !important; }
+.wb-saved-connection { display: grid; width: 100%; gap: 4px; padding: 12px; margin-bottom: 8px; text-align: left; border: 1px solid #d5dbd4; border-radius: 8px; background: white; color: #26352f; cursor: pointer; overflow-wrap: anywhere; }
+#wb-login-progress { padding: 14px; margin-top: 14px; background: #edf2eb; border-radius: 8px; }
+#wb-login-url { color: #3c694c; text-decoration: underline; }
+#wb-connection-status { min-height: 24px; }
+@media (max-width: 650px) { .wb-connection-layout { grid-template-columns: 1fr; } .wb-connections { padding: 18px; } }
+.wb-connections .wb-button, .wb-connections .wb-primary, .wb-connections .wb-link { padding: 9px 13px; border-radius: 7px; font: inherit; font-size: 14px; cursor: pointer; }
+.wb-connections .wb-button { background: #fff; color: #375b47; border: 1px solid #c5d0c6; }
+.wb-connections .wb-primary { background: #365d47; color: #fff; border: 1px solid #365d47; min-width: 120px; }
+.wb-connections .wb-link { border: 0; background: transparent; color: #476c54; }
+.wb-connections button:focus-visible, .wb-connections a:focus-visible { outline: 2px solid #4d795b; outline-offset: 3px; }

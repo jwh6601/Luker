@@ -114,6 +114,15 @@ export const allowKeysExposure = !!getConfigValue('allowKeysExposure', false, 'b
  * SecretManager class to handle all secret operations
  */
 export class SecretManager {
+    // OAuth refresh replaces the current credential atomically, retaining its
+    // identity and avoiding a growing history of expired refresh tokens.
+    replaceSecretValue(key, value, label) {
+        const secrets = this._readSecretsFile();
+        const current = secrets[key]?.find(secret => secret.active);
+        secrets[key] = [{ id: current?.id || uuidv4(), value, label, active: true }];
+        this._writeSecretsFile(secrets);
+    }
+
     /**
      * @param {import('../users.js').UserDirectoryList} directories
      */
@@ -182,6 +191,7 @@ export class SecretManager {
      * @returns {string} A masked version of the value for peeking
      */
     getMaskedValue(value, key) {
+        if (key === 'openai_codex_oauth') return '**********';
         // No masking if exposure is allowed
         if (allowKeysExposure || EXPORTABLE_KEYS.includes(key)) {
             return value;
@@ -578,6 +588,7 @@ router.post('/view', (request, response) => {
         }
 
         const secrets = getAllSecrets(request.user.directories);
+        delete secrets.openai_codex_oauth;
 
         if (!secrets) {
             return response.sendStatus(404);
@@ -593,6 +604,7 @@ router.post('/view', (request, response) => {
 router.post('/find', (request, response) => {
     try {
         const { key, id } = request.body;
+        if (key === 'openai_codex_oauth') return response.sendStatus(403);
 
         if (!key) {
             return response.status(400).send('Key is required');

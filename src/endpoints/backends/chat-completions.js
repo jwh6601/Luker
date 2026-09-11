@@ -1,5 +1,7 @@
 /* eslint-disable dot-notation */
 import express from 'express';
+import { CODEX_URL, codexRouter, codexRuntime } from '../../codex-subscription.js';
+import { dispatchCodexSubscription } from '../../luker-dispatch/providers/chat-completions/codex-subscription.js';
 import fetch from 'node-fetch';
 import urlJoin from 'url-join';
 
@@ -360,6 +362,7 @@ export function normalizeCohereResponseToOAI(raw) {
 }
 
 export const router = express.Router();
+router.use('/codex', codexRouter);
 
 router.post('/jobs/status', async function (request, response) {
     try {
@@ -547,6 +550,13 @@ router.post('/jobs/cancel', async function (request, response) {
 });
 
 router.post('/status', async function (request, statusResponse) {
+    if (request.body?.chat_completion_source === CHAT_COMPLETION_SOURCES.CUSTOM && request.body?.custom_url?.replace(/\/$/, '') === CODEX_URL) {
+        try {
+            const runtime = codexRuntime(request.user.directories);
+            if (!await runtime.credentials.read('openai-codex')) return statusResponse.status(401).json({ error: '请先登录 Codex 订阅。' });
+            return statusResponse.json({ data: runtime.models.getModels('openai-codex').map(model => ({ id: model.id })) });
+        } catch { return statusResponse.status(500).json({ error: '无法读取 Codex 登录状态。' }); }
+    }
     try {
         if (!request.body) return statusResponse.sendStatus(400);
 
@@ -1153,6 +1163,7 @@ const CHAT_COMPLETION_DISPATCH_TABLE = {
  * @returns {(ctx: import('../../luker-dispatch/context.js').DispatchContext) => Promise<void>}
  */
 export function selectChatCompletionDispatch(body) {
+    if (body?.chat_completion_source === CHAT_COMPLETION_SOURCES.CUSTOM && body?.custom_url?.replace(/\/$/, '') === CODEX_URL) return dispatchCodexSubscription;
     const source = String(body?.chat_completion_source || '');
     const fn = CHAT_COMPLETION_DISPATCH_TABLE[source];
     if (!fn) throw new Error(`Unsupported chat_completion_source: ${source}`);

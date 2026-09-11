@@ -1,6 +1,6 @@
 import { CONNECT_API_MAP } from '../../../script.js';
 import { extension_settings } from '../../extensions.js';
-import { chat_completion_sources, proxies } from '../../openai.js';
+import { chat_completion_sources, proxies, oai_settings } from '../../openai.js';
 
 let _chatModelSettingBySource;
 function getChatModelSettingBySource() {
@@ -342,10 +342,13 @@ export function resolveChatCompletionRequestProfile({
     profileName = '',
     defaultSource = '',
     defaultApi = 'openai',
+    modelOverride = '',
 } = {}) {
     const profile = getChatCompletionConnectionProfileByName(profileName);
     const requestApi = resolveRequestApiFromProfile(String(defaultApi || 'openai').trim() || 'openai', profile);
-    const apiSettingsOverride = buildApiSettingsOverrideFromProfile(profile, defaultSource);
+    let apiSettingsOverride = buildApiSettingsOverrideFromProfile(profile, defaultSource);
+    const modelField = getChatModelSettingBySource()[apiSettingsOverride?.chat_completion_source || defaultSource || oai_settings.chat_completion_source];
+    if (modelField && String(modelOverride).trim()) apiSettingsOverride = { ...apiSettingsOverride, [modelField]: String(modelOverride).trim() };
     return {
         profile,
         requestApi,

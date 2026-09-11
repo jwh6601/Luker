@@ -72,6 +72,7 @@ export function createPresetDraft(seed = {}) {
         systemPrompt: String(seed.systemPrompt || '').trim(),
         userPromptTemplate: String(seed.userPromptTemplate || '').trim(),
         apiPresetName: getPresetApiPresetName(seed),
+        model: String(seed.model || '').trim(),
         promptPresetName: getPresetPromptPresetName(seed),
         // null = inherit from profile.defaultTools at runtime; an object =
         // per-preset override (spec node / agenda agent / loop). The

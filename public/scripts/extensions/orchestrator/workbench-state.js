@@ -39,7 +39,7 @@ export function validateGenerationFields(effort, maxTokens) {
 /** Update only edited fields; preserve custom tools, skills and the exact topology. */
 export function applyNodeEdits(profile, edits) {
     const result = structuredClone(profile);
-    const allowed = new Set(['apiPresetName', 'promptPresetName', 'systemPrompt']);
+    const allowed = new Set(['apiPresetName', 'model', 'promptPresetName', 'systemPrompt']);
     for (const [id, changes] of edits) {
         if (!Object.hasOwn(result.presets || {}, id)) throw new Error('当前环节已不存在，请重新打开方案。');
         for (const [key, value] of Object.entries(changes)) {

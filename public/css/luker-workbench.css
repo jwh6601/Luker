@@ -198,3 +198,6 @@ body.luker-workbench.wb-native .drawer-content { max-width: calc(100vw - var(--w
 .wb-connections .wb-primary { background: #365d47; color: #fff; border: 1px solid #365d47; min-width: 120px; }
 .wb-connections .wb-link { border: 0; background: transparent; color: #476c54; }
 .wb-connections button:focus-visible, .wb-connections a:focus-visible { outline: 2px solid #4d795b; outline-offset: 3px; }
+.wb-model-field { min-width: 0; display: grid; gap: 8px; }
+#wb-main .wb-model-field select, #wb-main .wb-model-field input, #wb-main #wb-writer-model { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+#wb-main #wb-writer-model { margin: 8px 0 14px; }

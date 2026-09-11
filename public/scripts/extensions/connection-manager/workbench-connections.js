@@ -27,10 +27,11 @@ async function persist() {
     refreshNative();
 }
 
-export async function selectWriterConnection(name) {
+export async function selectWriterConnection(name, model) {
     const profile = connections().profiles.find(item => item.name === name && item.mode === 'cc');
     if (!profile) throw new Error('请选择已保存的连接。');
-    await applyConnectionProfile(profile);
+    if (!String(model || '').trim()) throw new Error('请先选择正文模型。');
+    await applyConnectionProfile({ ...profile, model: String(model).trim(), 'custom-models': JSON.stringify([String(model).trim()]) });
     connections().selectedProfile = profile.id;
     await persist();
     await context().eventSource.emit(context().eventTypes.CONNECTION_PROFILE_LOADED, profile.name);
@@ -52,25 +53,24 @@ export function openConnectionManager(onChanged = () => {}) {
         <label id="wb-key-row">API Key<input id="wb-connection-key" type="password" autocomplete="new-password" placeholder="新建时填写；编辑时留空保留"></label>
         <section id="wb-codex-login" hidden><p id="wb-codex-state"></p><p>复用 DSH 的订阅接入。当前支持文本与工具调用；最大输出长度由服务端决定。</p><button type="button" class="wb-button" data-action="login">登录 Codex 订阅</button> <button type="button" class="wb-link" data-action="logout">退出订阅登录</button>
         <div id="wb-login-progress" hidden><a id="wb-login-url" target="_blank" rel="noopener noreferrer">打开登录页面</a><p>登录完成后自动更新。如果未自动返回，可粘贴浏览器回调地址。</p><input id="wb-callback" type="password" autocomplete="off" aria-label="登录回调地址"><button type="button" class="wb-button" data-action="callback">完成登录</button><button type="button" class="wb-link" data-action="cancel">取消登录</button></div></section>
-        <label>模型<input id="wb-connection-model" list="wb-codex-models" required placeholder="填写准确的模型名称"><datalist id="wb-codex-models"></datalist></label>
+        <p>模型、推理等级和输出参数在 pipeline 的各个环节中选择。</p>
         <p id="wb-connection-status" role="status" aria-live="polite"></p><button type="submit" class="wb-primary">保存连接</button></form></div>`;
     document.body.append(dialog);
     const $ = selector => dialog.querySelector(selector);
     const message = text => { $('#wb-connection-status').textContent = text; };
-    const list = () => { $('#wb-connection-list').innerHTML = (connections().profiles || []).filter(profile => profile.mode === 'cc').map(profile => `<button type="button" class="wb-saved-connection" data-edit="${escape(profile.id)}"><strong>${escape(profile.name)}</strong><small>${profile['api-url'] === CODEX_URL ? 'Codex 订阅' : 'API'} · ${escape(profile.model)}</small></button>`).join('') || '<p>尚未保存连接。</p>'; };
+    const list = () => { $('#wb-connection-list').innerHTML = (connections().profiles || []).filter(profile => profile.mode === 'cc').map(profile => `<button type="button" class="wb-saved-connection" data-edit="${escape(profile.id)}"><strong>${escape(profile.name)}</strong><small>${profile['api-url'] === CODEX_URL ? 'Codex 订阅' : 'API'}</small></button>`).join('') || '<p>尚未保存连接。</p>'; };
     const changeType = () => {
         const type = $('#wb-connection-type').value;
         $('#wb-url-row').hidden = type === 'codex';
         $('#wb-key-row').hidden = type === 'codex';
         $('#wb-codex-login').hidden = type !== 'codex';
         $('#wb-connection-url').required = type === 'custom';
-        $('#wb-connection-model').setAttribute('list', type === 'codex' ? 'wb-codex-models' : 'wb-no-models');
     };
     const updateStatus = async () => {
         status = await api('status');
         if (!dialog.isConnected) return;
         $('#wb-codex-state').textContent = status.connected ? '已登录。多个 Codex 连接共用本机此账号。' : '尚未登录 Codex 订阅。';
-        $('#wb-codex-models').innerHTML = status.models.map(model => `<option value="${escape(model.id)}">${escape(model.name)}</option>`).join('');
+
         const waiting = status.login?.state === 'waiting';
         $('#wb-login-progress').hidden = !waiting;
         if (waiting && status.login.url) $('#wb-login-url').href = status.login.url;
@@ -97,7 +97,7 @@ export function openConnectionManager(onChanged = () => {}) {
                 $('#wb-connection-type').value = type;
                 $('#wb-connection-url').value = type === 'codex' ? '' : profile['api-url'] || profile['base-url'] || '';
                 $('#wb-connection-key').value = '';
-                $('#wb-connection-model').value = profile.model || '';
+
                 changeType();
             }
             if (button.dataset.action === 'new') { editingId = ''; $('#wb-connection-form').reset(); $('#wb-connection-name').readOnly = false; $('#wb-connection-title').textContent = '添加连接'; changeType(); }
@@ -116,13 +116,13 @@ export function openConnectionManager(onChanged = () => {}) {
         $('#wb-connection-form').inert = true;
         try {
             const name = $('#wb-connection-name').value.trim();
-            const model = $('#wb-connection-model').value.trim();
+
             const type = $('#wb-connection-type').value;
             const original = connections().profiles.find(profile => profile.id === editingId);
-            if (!name || !model) throw new Error('请填写连接名称和模型。');
+            if (!name) throw new Error('请填写连接名称。');
             if (connections().profiles.some(profile => profile.name === name && profile.id !== editingId)) throw new Error('已有同名连接，请换一个名称。');
             const isCodex = type === 'codex';
-            if (isCodex && !status?.models.some(item => item.id === model)) throw new Error('请从支持列表选择 Codex 模型。');
+
             const key = $('#wb-connection-key').value.trim();
             const url = $('#wb-connection-url').value.trim();
             if (url && !/^https?:\/\//i.test(url)) throw new Error('API 地址须以 http:// 或 https:// 开头。');
@@ -133,10 +133,10 @@ export function openConnectionManager(onChanged = () => {}) {
                 if (!secretId) throw new Error('密钥保存失败。');
             }
             if (!isCodex && !secretId) throw new Error('请填写此连接的 API Key。');
-            const profile = { ...original, id: editingId || crypto.randomUUID(), name, mode: 'cc', api: isCodex ? 'custom' : type, model,
+            const profile = { ...original, id: editingId || crypto.randomUUID(), name, mode: 'cc', api: isCodex ? 'custom' : type,
                 'api-url': isCodex ? CODEX_URL : type === 'custom' ? url : '', 'base-url': type !== 'custom' && !isCodex ? url : '',
                 'secret-id': isCodex ? '' : secretId, 'proxy-url': '', 'proxy-password': '', proxy: '',
-                'custom-models': JSON.stringify([model]),
+
                 ...Object.fromEntries(['custom-include-body', 'custom-exclude-body', 'custom-include-headers'].map(field => [field, !isCodex && original?.api === type ? original[field] || '' : ''])) };
             const index = connections().profiles.findIndex(item => item.id === profile.id);
             if (index < 0) connections().profiles.push(profile); else connections().profiles[index] = profile;

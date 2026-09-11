@@ -1,6 +1,31 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { generateTask } from '../../public/scripts/generate-task.js';
 import { applyNodeEdits, validateGenerationFields, workflowStages } from '../../public/scripts/extensions/orchestrator/workbench-state.js';
+
+test('per-stage model changes preserve sibling models and the shared connection', () => {
+    const original = { presets: { planner: { apiPresetName: 'Shared', model: 'one' }, reviewer: { apiPresetName: 'Shared', model: 'two' } } };
+    const result = applyNodeEdits(original, new Map([['planner', { model: 'three' }]]));
+    assert.equal(result.presets.planner.model, 'three');
+    assert.deepEqual(result.presets.reviewer, original.presets.reviewer);
+    assert.equal(original.presets.planner.model, 'one');
+    assert.equal(result.presets.planner.apiPresetName, 'Shared');
+});
+
+test('independent model selections travel through generateTask to the sender', async () => {
+    const captured = [];
+    for (const model of ['model-one', 'model-two']) {
+        await generateTask({ taskMessages: [{ role: 'user', content: 'test' }], apiPresetName: 'Shared', modelOverride: model }, { _injected: {
+            profileResolver: ({ profileName, modelOverride }) => ({ requestApi: 'openai', apiSettingsOverride: { custom_url: profileName, custom_model: modelOverride } }),
+            worldInfoResolver: async () => ({}), builder: ({ messages }) => messages,
+            senders: { sendOpenAIRequest: async (_type, _messages, _signal, options) => {
+                captured.push(options.apiSettingsOverride);
+                return { choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] };
+            } },
+        } });
+    }
+    assert.deepEqual(captured, [{ custom_url: 'Shared', custom_model: 'model-one' }, { custom_url: 'Shared', custom_model: 'model-two' }]);
+});
 
 test('changing a node preserves sibling presets, tool overrides, and parallel topology', () => {
     const original = {

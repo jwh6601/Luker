@@ -215,6 +215,7 @@ export function resolveProfile(apiPresetName, {
     resolver = null,
     defaultApi = 'openai',
     defaultSource = '',
+    modelOverride = '',
 } = {}) {
     const effectiveResolver = typeof resolver === 'function' ? resolver : getDefaultResolver();
     if (typeof effectiveResolver !== 'function') {
@@ -225,6 +226,7 @@ export function resolveProfile(apiPresetName, {
     }
     const resolution = effectiveResolver({
         profileName: String(apiPresetName || '').trim(),
+        ...(String(modelOverride || '').trim() ? { modelOverride: String(modelOverride).trim() } : {}),
         defaultApi: String(defaultApi || 'openai').trim() || 'openai',
         defaultSource: String(defaultSource || '').trim(),
     });
@@ -920,6 +922,7 @@ const RESPONSE_MODES = { TEXT: 'text', TOOL: 'tool', JSON: 'json' };
  * @param {string}  [params.worldInfoType='quiet']
  * @param {string}  [params.llmPresetName]
  * @param {string}  [params.apiPresetName]
+ * @param {string}  [params.modelOverride] Per-request model, independent of the saved connection.
  * @param {Array|null} [params.tools]
  * @param {string|object} [params.toolChoice='auto']
  * @param {object|null} [params.jsonSchema]
@@ -949,6 +952,7 @@ export async function generateTask({
     worldInfoType = 'quiet',
     llmPresetName = '',
     apiPresetName = '',
+    modelOverride = '',
     tools = null,
     toolChoice = 'auto',
     jsonSchema = null,
@@ -974,6 +978,7 @@ export async function generateTask({
     // ── 2. Profile resolution ──
     const profile = resolveProfile(apiPresetName, {
         resolver: profileResolver,
+        modelOverride,
         defaultApi: _injected?.defaultApi || 'openai',
         defaultSource: _injected?.defaultSource || '',
     });
@@ -1091,6 +1096,7 @@ export function generateTaskStream({
     worldInfoType = 'quiet',
     llmPresetName = '',
     apiPresetName = '',
+    modelOverride = '',
     tools = null,
     toolChoice = 'auto',
     jsonSchema = null,
@@ -1116,6 +1122,7 @@ export function generateTaskStream({
     // ── 2. Profile resolution (and stream_unavailable for non-openai) ──
     const profile = resolveProfile(apiPresetName, {
         resolver: profileResolver,
+        modelOverride,
         defaultApi: _injected?.defaultApi || 'openai',
         defaultSource: _injected?.defaultSource || '',
     });

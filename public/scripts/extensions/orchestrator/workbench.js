@@ -27,6 +27,9 @@ let parameterEdits = new Map();
 let nodeEdits = new Map();
 let refreshNative;
 let effectiveProfile;
+let modelCatalog = [];
+let writerDraft = { name: '', model: '' };
+let writerDirty = false;
 
 function say(message, error = false) {
     const status = document.querySelector('#wb-status');
@@ -34,6 +37,9 @@ function say(message, error = false) {
 }
 
 function resetDraft() {
+    const profile = ctx().extensionSettings.connectionManager?.profiles?.find(item => item.id === ctx().extensionSettings.connectionManager.selectedProfile);
+    writerDraft = { name: profile?.name || '', model: ctx().getChatCompletionModel?.() || profile?.model || '' };
+    writerDirty = false;
     editor = loadGlobalEditorState();
     baseline = structuredClone(settings());
     enabled = Boolean(settings().enabled);
@@ -55,7 +61,7 @@ function editNode(field, value) {
 }
 
 function mayLeave() {
-    return !saving && (!dirty || window.confirm('修改还没有保存，放弃这些修改？'));
+    return !saving && (!(dirty || writerDirty) || window.confirm('修改还没有保存，放弃这些修改？'));
 }
 
 function openNative(drawer) {
@@ -104,11 +110,14 @@ function currentParameters(preset) {
     return structuredClone(stored || context.chatCompletionSettings);
 }
 
-function modelFor(preset) {
-    const name = preset?.apiPresetName || settings().llmNodeApiPresetName;
-    const profiles = ctx().extensionSettings.connectionManager?.profiles || [];
-    const profile = profiles.find(item => item.name === name && item.mode === 'cc');
-    return profile?.model || (name ? '连接中指定的模型' : ctx().getChatCompletionModel?.() || '沿用当前对话模型');
+function modelControl(name, value, id) {
+    const profile = ctx().extensionSettings.connectionManager?.profiles?.find(item => item.name === name);
+    if (profile?.['api-url'] === 'https://codex.luker.invalid') {
+        const options = [...modelCatalog];
+        if (value && !options.some(item => item.id === value)) options.unshift({ id: value, name: value });
+        return `<select id="${id}" required><option value="">选择模型</option>${options.map(item => `<option value="${escape(item.id)}" ${item.id === value ? 'selected' : ''}>${escape(item.name)}</option>`).join('')}</select><small class="wb-muted">内置候选，不代表账号权限范围。</small>`;
+    }
+    return `<input id="${id}" value="${escape(value)}" placeholder="填写此环节使用的模型 ID" ${name ? 'required' : ''}>`;
 }
 
 function flowHtml() {
@@ -127,7 +136,9 @@ function flowHtml() {
 function detailHtml() {
     if (selected === '__writer') return `<section class="wb-card wb-detail"><span class="wb-eyebrow">正在配置</span><h2>正文生成</h2><p class="wb-muted">使用当前对话的模型与参数</p>
         <div class="wb-info">${icon('circle-info')}<div><strong>正文沿用 Luker 对话配置</strong><p>连接、模型和正文预设均在原有配置中管理。</p></div></div>
-        <label for="wb-writer-api">正文连接（选择后立即应用）</label><select id="wb-writer-api">${renderConnectionProfileOptions(ctx().extensionSettings.connectionManager?.profiles?.find(item => item.id === ctx().extensionSettings.connectionManager.selectedProfile)?.name || '', '选择已保存的连接')}</select>
+        <label for="wb-writer-api">正文连接</label><select id="wb-writer-api">${renderConnectionProfileOptions(writerDraft.name, '选择已保存的连接')}</select>
+        <label for="wb-writer-model">正文模型</label>${modelControl(writerDraft.name, writerDraft.model, 'wb-writer-model')}
+        <button class="wb-primary" data-wb-action="apply-writer">应用正文连接与模型</button>
         <div class="wb-writer-actions"><button class="wb-button" data-wb-action="connections">${icon('plug')} 管理连接</button><button class="wb-button" data-wb-native="ai-config-button">${icon('sliders')} 调整正文参数</button></div>
         ${saveFooter()}</section>`;
     const preset = editor.presets[selected];
@@ -139,7 +150,7 @@ function detailHtml() {
     return `<section class="wb-card wb-detail"><span class="wb-eyebrow">正在配置</span><h2>${escape(title)}</h2><p class="wb-muted">这些设置用于全局方案中的当前环节</p>
         <form id="wb-node-form"><div class="wb-fields">
             <label for="wb-api">API 连接</label><select id="wb-api">${renderConnectionProfileOptions(preset.apiPresetName, '沿用默认连接')}</select>
-            <span class="wb-field-label">模型</span><div class="wb-model"><span>${escape(modelFor(preset))}</span><button type="button" class="wb-link" data-wb-action="connections">管理连接</button></div>
+            <label for="wb-node-model">本环节模型</label><div class="wb-model-field">${modelControl(preset.apiPresetName || settings().llmNodeApiPresetName, preset.model || (ctx().extensionSettings.connectionManager?.profiles?.find(item => item.name === (preset.apiPresetName || settings().llmNodeApiPresetName))?.model || ''), 'wb-node-model')}<button type="button" class="wb-link" data-wb-action="connections">管理连接</button></div>
             <span class="wb-field-label" id="wb-effort-label">推理等级</span><div class="wb-effort" role="group" aria-labelledby="wb-effort-label">${[['auto', '默认'], ['low', '低'], ['medium', '中'], ['high', '高']].map(([value, label]) => `<button type="button" data-wb-effort="${value}" aria-pressed="${effort === value}" class="${effort === value ? 'wb-chosen' : ''}">${label}</button>`).join('')}</div>
             <label for="wb-tokens">最大输出长度</label><div class="wb-token-field"><input id="wb-tokens" type="number" min="1" max="2000000" step="1" value="${escape(params.openai_max_tokens ?? 2048)}" required><span>tokens</span></div>
         </div>
@@ -306,6 +317,10 @@ export function mountWorkbench({ refresh, getEffectiveProfile }) {
     panel = document.createElement('main'); panel.id = 'wb-main';
     document.body.append(sidebar, panel);
     resetDraft(); renderModels(); updateNavigation();
+    void fetch('/api/backends/chat-completions/codex/status', { method: 'POST', headers: ctx().getRequestHeaders(), body: '{}' })
+        .then(response => response.ok ? response.json() : Promise.reject(new Error('模型目录暂时不可用')))
+        .then(data => { modelCatalog = data.models || []; if (page === 'models') renderModels(); })
+        .catch(() => { if (page === 'models') say('Codex 模型目录暂时不可用，请刷新后重试。', true); });
     sidebar.addEventListener('click', event => {
         const button = event.target.closest('[data-wb-nav]');
         if (button) navigate(button.dataset.wbNav);
@@ -328,6 +343,12 @@ export function mountWorkbench({ refresh, getEffectiveProfile }) {
         }
         if (button.dataset.wbAction === 'reset' && mayLeave()) { resetDraft(); renderModels(); }
         if (button.dataset.wbAction === 'save') await save();
+        if (button.dataset.wbAction === 'apply-writer') {
+            const model = panel.querySelector('#wb-writer-model');
+            if (!model?.reportValidity()) return;
+            saving = true;
+            try { await selectWriterConnection(writerDraft.name, writerDraft.model); writerDirty = false; say('正文连接与模型已保存'); } catch (error) { say(error.message, true); } finally { saving = false; }
+        }
         if (button.dataset.wbAction === 'advanced') openAdvanced();
         if (button.dataset.wbAction === 'story') navigate('story');
         if (button.dataset.wbCharacter !== undefined) {
@@ -336,6 +357,8 @@ export function mountWorkbench({ refresh, getEffectiveProfile }) {
         }
     });
     panel.addEventListener('input', event => {
+        if (event.target.id === 'wb-node-model') editNode('model', event.target.value);
+        if (event.target.id === 'wb-writer-model') { writerDraft.model = event.target.value; writerDirty = true; say('正文模型尚未应用'); }
         if (event.target.id === 'wb-search') {
             const value = event.target.value; const position = event.target.selectionStart;
             renderLibrary(value); const input = document.getElementById('wb-search'); input.focus(); input.setSelectionRange(position, position);
@@ -347,11 +370,10 @@ export function mountWorkbench({ refresh, getEffectiveProfile }) {
     });
     panel.addEventListener('change', async event => {
         if (event.target.id === 'wb-writer-api') {
-            event.target.disabled = true;
-            try { await selectWriterConnection(event.target.value); renderModels(); say('正文连接已应用并保存'); } catch (error) { say(error.message, true); event.target.disabled = false; }
+            writerDraft = { name: event.target.value, model: '' }; writerDirty = true; renderModels();
             return;
         }
-        if (event.target.id === 'wb-api') { editNode('apiPresetName', event.target.value); renderModels(); }
+        if (event.target.id === 'wb-api') { editNode('apiPresetName', event.target.value); editNode('model', ''); renderModels(); }
         if (event.target.id === 'wb-prompt-preset') { editNode('promptPresetName', event.target.value); parameterEdits.delete(selected); renderModels(); }
         if (event.target.id === 'wb-effort') changeEffort(event.target.value);
         if (event.target.id === 'wb-plan') {
@@ -367,7 +389,7 @@ export function mountWorkbench({ refresh, getEffectiveProfile }) {
         }
     });
     panel.addEventListener('submit', event => { event.preventDefault(); void save(); });
-    window.addEventListener('beforeunload', event => { if (dirty || saving) { event.preventDefault(); event.returnValue = ''; } });
+    window.addEventListener('beforeunload', event => { if (dirty || writerDirty || saving) { event.preventDefault(); event.returnValue = ''; } });
     ctx().eventSource.on(ctx().eventTypes.CHAT_CHANGED, () => {
         if (page === 'models' && dirty) say('故事已切换；未保存的全局方案修改仍保留在这里。');
         else if (page === 'models') { resetDraft(); renderModels(); }
